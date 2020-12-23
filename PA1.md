@@ -12,6 +12,7 @@ output:
 ```r
 library(dplyr)
 library(ggplot2)
+library(lubridate)
 unzip("activity.zip")
 activityData = read.csv("activity.csv")
 ```
@@ -31,16 +32,93 @@ plot(plot)
 
 ```r
 mean = mean(dailySteps$totalSteps)
+median = median(dailySteps$totalSteps)
 
 plot = plot + geom_vline(xintercept = mean, col="red", lwd=1) +
-    annotate(geom="text", x=15000, y=8, label="Mean", col="red")
+    annotate(geom="text", x=15000, y=8, label="Mean", col="red") +
+    geom_vline(xintercept = median, col="blue", lwd=1) +
+    annotate(geom="text", x=15000, y=7.5, label="Median", col="blue")
 plot(plot)
 ```
 
 ![](PA1_files/figure-html/unnamed-chunk-3-1.png)<!-- -->
 
+## What is the average daily activity pattern?
+
+
+```r
+avgInterval = activityData %>% na.omit() %>% group_by(interval) %>%
+    summarise(tsteps = mean(steps))
+
+maxInterval = avgInterval[which.max(avgInterval$tsteps),]$interval
+
+avgInterval[which.max(avgInterval$tsteps),]
+```
+
+```
+## # A tibble: 1 x 2
+##   interval tsteps
+##      <int>  <dbl>
+## 1      835   206.
+```
+
+```r
+ggplot(avgInterval, aes(interval, tsteps)) + geom_line() +
+  geom_vline(xintercept = maxInterval, col="red", lwd=1)
+```
+
+![](PA1_files/figure-html/unnamed-chunk-4-1.png)<!-- -->
+
 ## Imputing missing values
 
 
+```r
+completeCases = activityData[complete.cases(activityData$steps), ]
+naCases = nrow(activityData) - nrow(completeCases)
+naCases #Number of NA cases
+```
 
+```
+## [1] 2304
+```
+
+```r
+## Replace all NA cases with the mean of the respective interval
+byInterval = group_by(activityData, interval) %>% summarise(avg= mean(steps, na.rm = T))
+activityDataNoNA = activityData;
+for(i in 1:nrow(activityData)) {
+  if (is.na(activityData[i, 1])) {
+      interval = activityData[i, 3]
+      meanInterval = byInterval[which(byInterval$interval == interval),]$avg
+      activityDataNoNA[i, 1] = meanInterval
+  }
+}
+dailySteps = group_by(activityDataNoNA, date = as.Date(date)) %>% 
+    summarise(totalSteps = sum(steps, na.rm = TRUE), .groups="drop")
+plot = ggplot(dailySteps, aes(totalSteps)) + geom_histogram(binwidth = 1000)
+plot(plot)
+```
+
+![](PA1_files/figure-html/unnamed-chunk-5-1.png)<!-- -->
+The values do differ, there are simply more observations so the count for each number of steps increased. The shape of the data remains almost identical. 
+
+
+3
 ## Are there differences in activity patterns between weekdays and weekends?
+
+
+```r
+activityDataNoNA$day_type = factor(ifelse(wday(activityDataNoNA$date)== 1 | wday(activityDataNoNA$date)==7, 0, 1), labels=c("weekend", "weekday"))
+
+weekendData = activityDataNoNA[activityDataNoNA$day_type=="weekend",]
+weekdayData = activityDataNoNA[activityDataNoNA$day_type=="weekday",]
+
+avgIntervalFinal = activityDataNoNA %>% na.omit() %>% group_by(day_type, interval) %>% summarise(tsteps=mean(steps))
+
+
+ggplot(avgIntervalFinal, aes(interval, tsteps)) + geom_line() + 
+  facet_grid(day_type ~ .) + 
+  labs(x="Interval", y="Number of Steps")
+```
+
+![](PA1_files/figure-html/unnamed-chunk-6-1.png)<!-- -->
